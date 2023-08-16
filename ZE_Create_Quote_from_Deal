@@ -1,0 +1,120 @@
+//========================================================
+// ### NOTES:
+// ACCOMPANIES VIDEO TWO IN THIS PLAYLIST: https://www.youtube.com/playlist?list=PLDtuXbhR3-8G6vCWnJTXmu22vvpA3BsKp
+// DON'T FORGET TO SET YOUR ARGUMENTS ABOVE!!
+// Deal_ID (int) and Quote_Description (string)
+//========================================================
+//
+Return_Map = Map();
+Error_Map = Map();
+//
+Quote_Products_List = list();
+Create_Quote_Map = Map();
+//
+Deal_Record = zoho.crm.getRecordById("Deals",Deal_ID);
+//
+Products_and_Services = Deal_Record.getJSON("Products_and_Services");
+//
+if(Products_and_Services != null)
+{
+	for each  Product_or_Service in Products_and_Services
+	{
+		Product_Mini_Record = Product_or_Service.getJSON("Product_Name");
+		if(Product_Mini_Record != null)
+		{
+			Product_ID = Product_Mini_Record.getJSON("id");
+			//
+			Product_Map = Map();
+			Product_Map.put("product",Product_ID);
+			Product_Map.put("product_description",ifnull(Product_or_Service.getJSON("Description"),""));
+			//
+			// SET PRODUCT QUANTITY TO 1 IF EMPTY OR 0:
+			if(Product_or_Service.getJSON("Quantity") == 0 || Product_or_Service.getJSON("Quantity") == null)
+			{
+				Product_Quantity = 1;
+			}
+			else
+			{
+				Product_Quantity = Product_or_Service.getJSON("Quantity");
+			}
+			Product_Map.put("quantity",Product_Quantity);
+			//
+			Product_Map.put("list_price",Product_or_Service.getJSON("Unit_Price"));
+			//
+			// ADD THE QUOTE PRODUCT MAP TO THE QUOTE PRODUCTS LIST:
+			Quote_Products_List.add(Product_Map);
+		}
+	}
+}
+//
+Deal_Name = Deal_Record.getJSON("Deal_Name");
+Contact_Mini_Record = Deal_Record.getJSON("Contact_Name");
+//
+if(Contact_Mini_Record != null)
+{
+	Contact_ID = Contact_Mini_Record.getJSON("id");
+}
+//
+//
+Account_Mini_Record = Deal_Record.getJSON("Account_Name");
+if(Account_Mini_Record != null)
+{
+	Account_ID = Account_Mini_Record.getJSON("id");
+	//
+	Account_Record = zoho.crm.getRecordById("Accounts",Account_ID);
+	//
+	Create_Quote_Map.put("Billing_Street",ifnull(Account_Record.getJSON("Billing_Street"),""));
+	Create_Quote_Map.put("Billing_City",ifnull(Account_Record.getJSON("Billing_City"),""));
+	Create_Quote_Map.put("Billing_State",ifnull(Account_Record.getJSON("Billing_State"),""));
+	Create_Quote_Map.put("Billing_Code",ifnull(Account_Record.getJSON("Billing_Code"),""));
+	Create_Quote_Map.put("Billing_Country",ifnull(Account_Record.getJSON("Billing_Country"),""));
+}
+//
+//
+if(Quote_Products_List.isEmpty() == true)
+{
+	info "ERROR - NO PRODUCTS";
+	Error_Map.put("No Products Found",Quote_Products_List);
+}
+else
+{
+	// PRODUCTS FOUND:
+	Create_Quote_Map.put("Product_Details",Quote_Products_List);
+	Create_Quote_Map.put("Subject",Deal_Name);
+	Create_Quote_Map.put("Contact_Name",Contact_ID);
+	Create_Quote_Map.put("Account_Name",Account_ID);
+	Create_Quote_Map.put("Deal_Name",Deal_ID);
+	Create_Quote_Map.put("Description",Quote_Description);
+	Create_Quote_Map.put("Quote_Stage","Delivered");
+	//
+	Create_Quote_Response = zoho.crm.createRecord("Quotes",Create_Quote_Map,{"trigger":{"workflow","blueprint","approval"}});
+	//
+	info Create_Quote_Response;
+	//
+	if(Create_Quote_Response != null)
+	{
+		if(Create_Quote_Response.containKey("id") == true)
+		{
+			info "QUOTE SUCCESSFULLY CREATED";
+			Quote_Record_ID = Create_Quote_Response.getJSON("id");
+			Return_Map.put("SUCCESS","SUCCESS");
+			Return_Map.put("Quote_Record_ID",Quote_Record_ID);
+		}
+	}
+	//
+}
+//
+if(Quote_Record_ID == null)
+{
+	info "ERROR CREATING QUOTE";
+	Error_Map.put("No Quote_Record_ID Found",Create_Quote_Response);
+}
+//
+if(Error_Map.isEmpty() == false)
+{
+	// ERROR
+	Return_Map.put("ERRORS",Error_Map);
+}
+//
+//
+return Return_Map;
