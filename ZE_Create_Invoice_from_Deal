@@ -1,0 +1,377 @@
+// ************** THIS IS TO BE CREATED AS A STANDALONE FUNCTION IN ZOHO CRM
+// ************** REMEMBER TO SET THE FUNCTION PARAMETER AS "Deal_ID" (int)
+//
+Books_Org_ID = zoho.crm.getOrgVariable("ZE_Zoho_Books_Org_ID");
+//
+// USE THE BELOW IF YOU HAVE A CUSTOM FIELD ON YOUR INVOICE THAT YOU NEED TO FILL:
+Custom_Field_ID = null;
+Custom_Field_Value = null;
+//
+Error_Map = Map();
+Return_Map = Map();
+Update_Deal_Map = Map();
+Create_Invoice_Map = Map();
+Product_Items_List = list();
+//
+Deal_Record = zoho.crm.getRecordById("Deals",Deal_ID);
+// Related_Quotes = zoho.crm.getRelatedRecords("Quotes", "Deals", Deal_ID);
+// info Related_Quotes ;
+// if ( Related_Quotes.isEmpty() == false ) 
+// {
+// 	Quote_Record = Related_Quotes.get(0);
+// }
+// 
+Deal_Subform_Total = Deal_Record.getJSON("Total");
+//
+if(Deal_Subform_Total < 50)
+{
+	Error_Map.put("Deal_Subform_Total Amount Below $50",Deal_Record);
+}
+//
+Closing_Date = Deal_Record.getJSON("Closing_Date");
+//
+//
+if(Closing_Date != null)
+{
+	if(Closing_Date.toDate() < zoho.currentdate)
+	{
+		Invoice_Due_Date = zoho.currentdate;
+	}
+	else
+	{
+		Invoice_Due_Date = Closing_Date;
+	}
+}
+else
+{
+	Invoice_Due_Date = zoho.currentdate;
+}
+//
+Deal_Name = Deal_Record.getJSON("Deal_Name");
+//
+Deal_Account_Mini_Record = Deal_Record.getJSON("Account_Name");
+//
+if(Deal_Account_Mini_Record != null)
+{
+	CRM_Account_Record_ID = Deal_Account_Mini_Record.getJSON("id");
+}
+else
+{
+	Error_Map.put("No Account found on Deal",Deal_Record);
+}
+//
+Deal_Contact_Mini_Record = Deal_Record.getJSON("Contact_Name");
+if(Deal_Contact_Mini_Record != null)
+{
+	Deal_Contact_Name = Deal_Contact_Mini_Record.getJSON("name");
+	Deal_Contact_ID = Deal_Contact_Mini_Record.getJSON("id");
+}
+else
+{
+	Error_Map.put("No Contact found on Deal",Deal_Record);
+}
+//
+Products_and_Services_List = Deal_Record.getJSON("Products_and_Services");
+//
+if(Products_and_Services_List.isEmpty() == false)
+{
+	for each  CRM_Item in Products_and_Services_List
+	{
+		//
+		CRM_Item_Quantity = CRM_Item.getJSON("Quantity");
+		if(CRM_Item_Quantity == 0 || CRM_Item_Quantity == null)
+		{
+			CRM_Item_Quantity = 1;
+		}
+		//
+		CRM_Unit_Price = CRM_Item.getJSON("Unit_Price");
+		//
+		//
+		//
+		CRM_Item_Description = CRM_Item.getJSON("Description");
+		//
+		// GET PRODUCT MINI RECORD FROM SUBFORM ENTRY:
+		CRM_Item_Mini_Record = CRM_Item.getJSON("Product_Name");
+		if(CRM_Item_Mini_Record != null)
+		{
+			// GET PRODUCT NAME:
+			CRM_Item_Name = CRM_Item_Mini_Record.getJSON("name");
+			// GET PRODUCT ID:
+			CRM_Item_ID = CRM_Item_Mini_Record.getJSON("id");
+			//
+			//
+			// FIND BOOKS ITEM ID:
+			Books_Search_Map = Map();
+			Books_Search_Map.put("zcrm_product_id",CRM_Item_ID.toString());
+			Books_Item_Records_Search_Response = zoho.books.getRecords("Items",Books_Org_ID,Books_Search_Map,"ze_books");
+			//
+			if(Books_Item_Records_Search_Response != null)
+			{
+				if(Books_Item_Records_Search_Response.containKey("items") == true)
+				{
+					info "Books_Item_Records_Search_Response:";
+					info Books_Item_Records_Search_Response;
+					//
+					Books_Item_Records_List = Books_Item_Records_Search_Response.getJSON("items");
+					if(Books_Item_Records_List.isEmpty() == false)
+					{
+						info "Books_Item_Records_List:";
+						info Books_Item_Records_List;
+						//
+						Books_Item_Record = Books_Item_Records_List.get(0);
+						if(Books_Item_Record.isEmpty() == false)
+						{
+							Books_Item_Record_ID = Books_Item_Record.getJSON("item_id");
+							//
+							if(Books_Item_Record_ID != null)
+							{
+								// PERPARE INVOICE ITEM:
+								Product_Item_Map = Map();
+								Product_Item_Map.put("item_id",Books_Item_Record_ID);
+								Product_Item_Map.put("rate",CRM_Unit_Price);
+								Product_Item_Map.put("quantity",CRM_Item_Quantity);
+								Product_Item_Map.put("description",CRM_Item_Description);
+								Product_Items_List.add(Product_Item_Map);
+							}
+							//
+						}
+						else
+						{
+							Error_Map.put(CRM_Item + " - Specific Books Item Not Found",Books_Item_Record);
+						}
+					}
+					else
+					{
+						Error_Map.put("Books Item List Empty",Books_Item_Records_List);
+					}
+				}
+				else
+				{
+					Error_Map.put("No Books Items Found",Books_Item_Records_Search_Response);
+				}
+			}
+			else
+			{
+				Error_Map.put("Books_Item_Records_Search_Response is NULL",Books_Item_Records_Search_Response);
+			}
+		}
+		else
+		{
+			Return_Map.put(CRM_Item,"No Product_Name");
+		}
+		//
+	}
+}
+//
+//
+//
+//============================================================
+// START - GET BOOKS CUSTOMER ID FOR DEAL ACCOUNT:
+//============================================================
+//
+// ****** NOTE: IF YOU ARE NOT IN THE ".com" DATA CENTER, CHANGE THE ".com" IN THE BELOW URL TO YOUR DOMAIN (e.g. ".eu", ".in", etc.) ******
+//
+// SYNC ZOHO ACCOUNT RECORD TO BOOKS:
+Sync_CRM_Account_to_Books_Response = invokeurl
+[
+	url :"https://www.zohoapis.com/books/v3/crm/account/" + CRM_Account_Record_ID.toString() + "/import?organization_id=" + Books_Org_ID
+	type :POST
+	connection:"ze_books"
+];
+//
+if(Sync_CRM_Account_to_Books_Response != null)
+{
+	if(Sync_CRM_Account_to_Books_Response.containKey("data") == true)
+	{
+		Response_Data = Sync_CRM_Account_to_Books_Response.getJSON("data");
+		Books_Customer_ID = Response_Data.getJSON("customer_id");
+		//
+		info "Books_Customer_ID: " + Books_Customer_ID;
+	}
+	else
+	{
+		Error_Map.put("No Data in Sync_CRM_Account_to_Books_Response",Sync_CRM_Account_to_Books_Response);
+	}
+}
+else
+{
+	Error_Map.put("Sync_CRM_Account_to_Books_Response is null",Sync_CRM_Account_to_Books_Response);
+}
+//
+//
+//============================================================
+// END - GET BOOKS CUSTOMER ID FOR DEAL ACCOUNT:
+//============================================================
+//
+//
+//============================================================
+// START - SET PAYMENT GATEWAY FOR INVOICE:
+//============================================================
+//
+Payment_Options_Map = Map();
+Payment_Gateways_List = list();
+//
+Payment_Gateway_Map = Map();
+Payment_Gateway_Map.put("configured",true);
+Payment_Gateway_Map.put("gateway_name","authorize_net");
+// Allowed gateway_name Values: paypal, authorize_net, payflow_pro, stripe, 2checkout, braintree
+Payment_Gateways_List.add(Payment_Gateway_Map);
+//
+// NO PAYMENT GATEWAY SET UP ON MY SYSTEM:
+// Payment_Options_Map.put("payment_gateways",Payment_Gateways_List);
+//
+//============================================================
+// END - SET PAYMENT GATEWAY FOR INVOICE:
+//============================================================
+//
+//
+//
+//==================================================
+// START - IF NO ERRORS FOUND, CREATE INVOICE:
+//==================================================
+//
+if(Error_Map.isEmpty() == true)
+{
+	// NO ERRORS FOUND SO FAR - CREATE INVOICE:
+	//
+	Create_Invoice_Map.put("customer_id",Books_Customer_ID);
+	Create_Invoice_Map.put("line_items",Product_Items_List);
+	Create_Invoice_Map.put("date",Invoice_Due_Date);
+	Create_Invoice_Map.put("due_date",Invoice_Due_Date);
+	Create_Invoice_Map.put("payment_terms",0);
+	Create_Invoice_Map.put("payment_terms_label","Due on Receipt");
+	Create_Invoice_Map.put("payment_options",Payment_Options_Map);
+	Create_Invoice_Map.put("zcrm_potential_id",Deal_ID);
+	Create_Invoice_Map.put("subject_content",Deal_Name);
+	Create_Invoice_Map.put("notes","Thank you for choosing ZE Partner!");
+	//
+	//
+	//
+	if(Custom_Field_Value != "" && Custom_Field_Value != null)
+	{
+		// ADD TRADEMARK SERIAL NUMBER TO INVOICE
+		// BOOKS INVOICE CUSTOM FIELD ID: cf_trademark_serial_number = 2357136000001180010
+		Custom_Fields_List = list();
+		Custom_Field_Map = Map();
+		//
+		Custom_Field_Map = Map();
+		Custom_Field_Map.put("customfield_id",Custom_Field_ID);
+		Custom_Field_Map.put("value",Custom_Field_Value);
+		Custom_Fields_List.add(Custom_Field_Map);
+		Create_Invoice_Map.put("custom_fields",Custom_Fields_List);
+	}
+	//
+	//
+	Create_Invoice_Response = zoho.books.createRecord("Invoices",Books_Org_ID,Create_Invoice_Map,"ze_books");
+	info Create_Invoice_Response;
+	//
+	if(Create_Invoice_Response != null)
+	{
+		//
+		if(Create_Invoice_Response.containKey("code") == true)
+		{
+			if(Create_Invoice_Response.getJSON("code") == 0)
+			{
+				// INVOICE CREATED SUCCESSFULLY
+				info "INVOICE CREATED";
+				Books_Invoice_Record_Map = Create_Invoice_Response.getJSON("invoice");
+				Books_Invoice_Record_ID = Books_Invoice_Record_Map.getJSON("invoice_id");
+				Books_Invoice_Number = Books_Invoice_Record_Map.getJSON("invoice_number");
+				Books_Invoice_URL = Books_Invoice_Record_Map.getJSON("invoice_url");
+				//
+				Return_Map.put("INVOICE_SUCCESS",Create_Invoice_Response);
+				Return_Map.put("INVOICE_URL",Books_Invoice_URL);
+				Return_Map.put("INVOICE_ID",Books_Invoice_Record_ID);
+				//
+				//
+				// APPLY RETAINERS (if any) TO NEW INVOICE:
+				// 				Apply_Retainers_Response = standalone.ZE_Auto_Apply_Retainers_to_Invoice(Books_Invoice_Record_ID);
+				// 				Return_Map.put("RETAINER FUNCTION RESPONSE",Apply_Retainers_Response);
+				//
+				//
+				// UPDATE DEAL RECORD:
+				Update_Deal_Map.put("Books_Invoice_ID",Books_Invoice_Record_ID);
+				Update_Deal_Map.put("Customer_Invoice_URL",Books_Invoice_URL);
+				Update_Deal_Response = zoho.crm.updateRecord("Deals",Deal_ID,Update_Deal_Map,{"trigger":{"workflow","blueprint","approval"}});
+				//
+				Return_Map.put("DEAL_UPDATE_SUCCESS",Update_Deal_Response);
+				//
+				//
+				// UPDATE INVOICE STATUS TO SENT
+				Update_Invoice_Status_Response = zoho.books.markStatus("Invoices",Books_Org_ID,Books_Invoice_Record_ID,"Sent","ze_books");
+				info "=========================";
+				info "Update_Invoice_Status_Response:";
+				info Update_Invoice_Status_Response;
+				info "=========================";
+				//
+				Return_Map.put("INVOICE_STATUS_UPDATE_SUCCESS",Update_Invoice_Status_Response);
+			}
+			else
+			{
+				Error_Map.put("Could not Create Invoice - Code Not 0",Create_Invoice_Response);
+			}
+		}
+		else
+		{
+			Error_Map.put("Could not Create Invoice - Response doesnot contain Code",Create_Invoice_Response);
+		}
+	}
+	else
+	{
+		Error_Map.put("Could not Create Invoice - Response is null",Create_Invoice_Response);
+	}
+	//
+}
+else
+{
+	info "NO INVOICE CREATED BECAUSE ERROR FOUND";
+	Error_Map.put("No Invoice Created",Deal_Record);
+}
+//
+//==================================================
+// END - IF NO ERRORS FOUND, CREATE INVOICE:
+//==================================================
+//
+// ==================================================
+// ********** IMPORTANT:
+// ********** THIS CODE WILL NOT SAVE UNLESS YOU HAVE THE ZE LOGGER EXTENSION INSTALLED ON YOUR SYSTEM. YOU CAN INSTALL IT HERE FOR FREE: https://marketplace.zoho.com/app/crm/zelogger-for-zoho-crm
+//===================================================
+//
+//===================================================
+// START - LOG OUTCOME:
+//===================================================
+//
+if(Error_Map.isEmpty() == false)
+{
+	// ERRORS FOUND:
+	Return_Map.put("ERRORS",Error_Map);
+	//
+	try 
+	{
+		Create_Log_Response = zelogger.Create_ZE_Log(Deal_ID,"Deals","Error",Return_Map,"High","ZE_Create_Invoice_from_Deal");
+	}
+	catch (Error)
+	{
+		//
+	}
+}
+else
+{
+	// NO ERRORS FOUND:
+	try 
+	{
+		Create_Log_Response = zelogger.Create_ZE_Log(Deal_ID,"Deals","FYI",Return_Map,"FYI","ZE_Create_Invoice_from_Deal");
+	}
+	catch (Error)
+	{
+		//
+	}
+}
+//
+//===================================================
+// END - LOG OUTCOME:
+//===================================================
+//
+//
+//
+return Return_Map;
