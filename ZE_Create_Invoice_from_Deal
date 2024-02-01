@@ -250,7 +250,7 @@ if(Error_Map.isEmpty() == true)
 	if(Custom_Field_Value != "" && Custom_Field_Value != null)
 	{
 		// ADD TRADEMARK SERIAL NUMBER TO INVOICE
-		// BOOKS INVOICE CUSTOM FIELD ID: cf_trademark_serial_number = 2357136000001180010
+		// BOOKS INVOICE CUSTOM FIELD ID:
 		Custom_Fields_List = list();
 		Custom_Field_Map = Map();
 		//
